@@ -1,128 +1,104 @@
-import { useState } from "react";
-import { Filter, Search } from "lucide-react";
-
-// Mock data simulating "Mutual Funds Table" [cite: 126]
-const ALL_FUNDS = [
-  {
-    id: 101,
-    name: "Vanguard 500 Index",
-    category: "Equity",
-    risk: "High",
-    expense: "0.04%",
-  },
-  {
-    id: 102,
-    name: "Fidelity Total Bond",
-    category: "Debt",
-    risk: "Low",
-    expense: "0.45%",
-  },
-  {
-    id: 103,
-    name: "ARK Innovation ETF",
-    category: "Equity",
-    risk: "Very High",
-    expense: "0.75%",
-  },
-  {
-    id: 104,
-    name: "Goldman Sachs Liquid",
-    category: "Hybrid",
-    risk: "Medium",
-    expense: "0.18%",
-  },
-];
+import { useEffect, useState } from "react";
+import { getFunds } from "../services/api";
 
 const FundList = () => {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("All");
+  const [funds, setFunds] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // SQL-like filtering logic [cite: 151]
-  const filteredFunds = ALL_FUNDS.filter((fund) => {
-    const matchesSearch = fund.name
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase());
-    const matchesCategory =
-      selectedCategory === "All" || fund.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  useEffect(() => {
+    getFunds()
+      .then((data) => {
+        setFunds(data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error(err);
+        setLoading(false);
+      });
+  }, []);
+
+  const addToPortfolio = async (fundId) => {
+    try {
+      await fetch("http://localhost:5000/api/portfolio/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: 1, // demo user
+          fund_id: fundId,
+          amount: 10000,
+          type: "Lumpsum",
+        }),
+      });
+
+      alert("Added to portfolio");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to add");
+    }
+  };
+
+  if (loading) {
+    return <p className="p-4 text-gray-600">Loading funds...</p>;
+  }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Explore Funds</h1>
-          <p className="text-gray-500">
-            Discover new investment opportunities.
-          </p>
-        </div>
+    <div className="p-6">
+      <h2 className="text-2xl font-semibold mb-6">Available Mutual Funds</h2>
 
-        <div className="flex gap-2">
-          <div className="relative">
-            <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-              size={20}
-            />
-            <input
-              type="text"
-              placeholder="Search funds..."
-              className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent w-full md:w-64"
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <select
-            className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
-            onChange={(e) => setSelectedCategory(e.target.value)}
-          >
-            <option value="All">All Categories</option>
-            <option value="Equity">Equity</option>
-            <option value="Debt">Debt</option>
-            <option value="Hybrid">Hybrid</option>
-          </select>
-        </div>
-      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full border border-gray-200 rounded-lg">
+          <thead className="bg-gray-100">
+            <tr>
+              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+                Fund Name
+              </th>
+              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+                Category
+              </th>
+              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+                NAV
+              </th>
+              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+                Risk
+              </th>
+              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+                Action
+              </th>
+            </tr>
+          </thead>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredFunds.map((fund) => (
-          <div
-            key={fund.id}
-            className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow group"
-          >
-            <div className="flex justify-between items-start mb-4">
-              <span
-                className={`px-3 py-1 rounded-full text-xs font-semibold 
-                ${
-                  fund.category === "Equity"
-                    ? "bg-purple-100 text-purple-700"
-                    : fund.category === "Debt"
-                      ? "bg-blue-100 text-blue-700"
-                      : "bg-orange-100 text-orange-700"
-                }`}
-              >
-                {fund.category}
-              </span>
-              <span className="text-xs font-medium text-gray-400">
-                Exp: {fund.expense}
-              </span>
-            </div>
-
-            <h3 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-brand-600 transition-colors">
-              {fund.name}
-            </h3>
-
-            <div className="flex items-center gap-2 mb-6 text-sm text-gray-500">
-              <TrendingUp size={16} />
-              <span>
-                Risk Level:{" "}
-                <strong className="text-gray-900">{fund.risk}</strong>
-              </span>
-            </div>
-
-            <button className="w-full py-2.5 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 transition-colors shadow-lg shadow-gray-200">
-              Invest Now
-            </button>
-          </div>
-        ))}
+          <tbody>
+            {funds.map((fund) => (
+              <tr key={fund.fund_id} className="border-t hover:bg-gray-50">
+                <td className="px-4 py-3">{fund.fund_name}</td>
+                <td className="px-4 py-3">{fund.category}</td>
+                <td className="px-4 py-3">₹{fund.nav}</td>
+                <td className="px-4 py-3">
+                  <span
+                    className={`px-2 py-1 rounded text-xs font-medium
+                      ${
+                        fund.risk_level === "High"
+                          ? "bg-red-100 text-red-700"
+                          : fund.risk_level === "Medium"
+                            ? "bg-yellow-100 text-yellow-700"
+                            : "bg-green-100 text-green-700"
+                      }`}
+                  >
+                    {fund.risk_level}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <button
+                    onClick={() => addToPortfolio(fund.fund_id)}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm hover:bg-blue-700 transition"
+                  >
+                    Add
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

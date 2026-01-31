@@ -1,0 +1,16 @@
+import mysql from "mysql2";
+
+export const db = mysql.createConnection({
+    host: "localhost",
+    user: "root",
+    password: "",        // put password if you have one
+    database: "investiq"
+});
+
+db.connect(err => {
+    if (err) {
+        console.error("DB connection failed:", err);
+    } else {
+        console.log("Connected to InvestIQ database");
+    }
+});
