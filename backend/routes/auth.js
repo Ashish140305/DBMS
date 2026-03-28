@@ -37,36 +37,35 @@ router.post("/register", async (req, res) => {
 });
 
 // 2. LOGIN ROUTE
+// Login Route
 router.post("/login", (req, res) => {
-    const { email, password } = req.body;
+  const { email, password } = req.body;
 
-    // Find the user by email
-    db.query("SELECT * FROM users WHERE email = ?", [email], async (err, results) => {
-        if (err) return res.status(500).json({ error: "Database error" });
-        if (results.length === 0) return res.status(404).json({ message: "User not found" });
+  // Make sure you are selecting everything (*) from the user
+  db.query("SELECT * FROM users WHERE email = ?", [email], async (err, results) => {
+    if (err) return res.status(500).json(err);
+    if (results.length === 0) return res.status(404).json({ error: "User not found!" });
 
-        const user = results[0];
+    const user = results[0];
+    
+    // Check password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(400).json({ error: "Wrong credentials!" });
 
-        // Compare the typed password with the hashed password in DB
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
-
-        // Generate a JSON Web Token (JWT)
-        const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, {
-            expiresIn: "1h", // Token expires in 1 hour
-        });
-
-        // Send the token and user data back to the React frontend
-        res.json({
-            message: "Logged in successfully",
-            token,
-            user: {
-                id: user.id,
-                username: user.username,
-                email: user.email
-            }
-        });
+    // ✨ THE FIX: Include full_name and profile_picture in the payload sent to React!
+    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        full_name: user.full_name,            // <-- ADD THIS
+        profile_picture: user.profile_picture // <-- ADD THIS
+      },
     });
+  });
 });
 
 export default router;

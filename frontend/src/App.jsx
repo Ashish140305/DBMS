@@ -13,7 +13,10 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import LandingPage from "./pages/LandingPage";
 import StockAnalyzer from "./pages/StockAnalyzer";
-import Glossary from './pages/Glossary';
+import Glossary from "./pages/Glossary";
+import Profile from "./pages/Profile";
+import Leaderboard from "./pages/Leaderboard";
+import Admin from "./pages/Admin";
 
 function App() {
   const [user, setUser] = useState(null);
@@ -65,6 +68,24 @@ function App() {
           <Route path="/analyzer" element={<StockAnalyzer />} />
 
           <Route path="/glossary" element={<Glossary />} />
+
+          <Route
+            path="/profile"
+            element={
+              user ? (
+                <Profile user={user} setUser={setUser} />
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+
+          <Route
+            path="/leaderboard"
+            element={user ? <Leaderboard /> : <Navigate to="/login" />}
+          />
+
+          <Route path="/admin" element={<Admin />} />
         </Routes>
       </div>
     </Router>

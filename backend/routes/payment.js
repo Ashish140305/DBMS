@@ -13,7 +13,7 @@ router.post("/create-checkout-session", async (req, res) => {
     // Create a Stripe Checkout Session
     const session = await stripe.checkout.sessions.create({
       // 👇 Added "netbanking" for Indian Bank Transfers / Mobile Banking
-      payment_method_types: ["card", "upi", "netbanking"],
+      payment_method_types: ["card", "upi"],
       mode: "payment",
       line_items: [
         {

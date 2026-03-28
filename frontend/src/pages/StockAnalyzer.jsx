@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   LineChart,
   Line,
@@ -23,23 +23,61 @@ import {
   Crosshair,
   AlertCircle,
   Scale,
+  Thermometer,
+  Newspaper,
 } from "lucide-react";
 
 export default function StockAnalyzer() {
   const navigate = useNavigate();
-  const [symbol, setSymbol] = useState("RELIANCE.NS");
-  const [searchInput, setSearchInput] = useState("RELIANCE.NS");
-  const [loading, setLoading] = useState(true);
+
+  // 1. CHANGED: Start with empty states
+  const [symbol, setSymbol] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [loading, setLoading] = useState(false); // Start false since we aren't fetching yet
   const [error, setError] = useState("");
 
-  // State to hold our live fetched data
+  // States to hold our live fetched data
   const [liveQuote, setLiveQuote] = useState(null);
   const [technicalData, setTechnicalData] = useState([]);
+  const [newsFeed, setNewsFeed] = useState([]);
+  const [newsLoading, setNewsLoading] = useState(false);
+  const [isGeneralNews, setIsGeneralNews] = useState(false);
 
-  // Fetch data whenever the 'symbol' changes
+  // Auto-Suggest States
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // 2. CHANGED: Only fetch if a symbol is actually set
   useEffect(() => {
-    fetchStockData(symbol);
+    if (symbol) {
+      fetchStockData(symbol);
+    }
   }, [symbol]);
+
+  // Smart Auto-Suggest Engine
+  useEffect(() => {
+    if (searchInput.trim().length < 2) {
+      setSuggestions([]);
+      return;
+    }
+
+    const fetchSuggestions = async () => {
+      try {
+        const res = await fetch(
+          `http://localhost:5000/api/live/search/${searchInput}`,
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setSuggestions(data.slice(0, 6));
+        }
+      } catch (err) {
+        console.error("Autocomplete error:", err);
+      }
+    };
+
+    const delayDebounceFn = setTimeout(fetchSuggestions, 300);
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchInput]);
 
   const fetchStockData = async (ticker) => {
     setLoading(true);
@@ -54,7 +92,7 @@ export default function StockAnalyzer() {
       const quoteData = await quoteRes.json();
 
       if (!quoteData || quoteData.length === 0) {
-        throw new Error(`No data found for ticker: ${ticker}`);
+        throw new Error(`No data found for: ${ticker}`);
       }
 
       const currentQuote = quoteData[0];
@@ -67,23 +105,69 @@ export default function StockAnalyzer() {
       if (!historyRes.ok) throw new Error("Failed to fetch historical chart");
       const historyData = await historyRes.json();
 
-      // 3. Process the raw history to calculate SMA and RSI dynamically
+      // 3. Process the raw history to calculate SMA, RSI, and Bollinger Bands
       const processedChart = calculateTechnicalIndicators(
         historyData,
         currentQuote.regularMarketVolume,
       );
       setTechnicalData(processedChart);
+
+      // 4. SMART NEWS FETCHER WITH FALLBACKS
+      try {
+        setNewsLoading(true);
+        setIsGeneralNews(false);
+        let fetchedNews = [];
+
+        // Attempt 1: Exact Ticker (e.g. ZOMATO.NS)
+        let newsRes = await fetch(
+          `http://localhost:5000/api/live/news/${ticker}`,
+        );
+        if (newsRes.ok) fetchedNews = await newsRes.json();
+
+        // Attempt 2: Cleaned Ticker (e.g. ZOMATO)
+        if (
+          fetchedNews.length === 0 &&
+          (ticker.includes(".NS") || ticker.includes(".BO"))
+        ) {
+          const cleanTicker = ticker.replace(".NS", "").replace(".BO", "");
+          let fallback1 = await fetch(
+            `http://localhost:5000/api/live/news/${cleanTicker}`,
+          );
+          if (fallback1.ok) fetchedNews = await fallback1.json();
+        }
+
+        // Attempt 3: General Indian Market (NIFTY 50)
+        if (fetchedNews.length === 0) {
+          let fallback2 = await fetch(
+            `http://localhost:5000/api/live/news/NIFTY`,
+          );
+          if (fallback2.ok) {
+            fetchedNews = await fallback2.json();
+            setIsGeneralNews(true); // Flag to tell the user these are general market updates
+          }
+        }
+
+        // Filter valid articles and limit to top 3
+        const validNews = fetchedNews
+          .filter((n) => n.title && n.link)
+          .slice(0, 3);
+        setNewsFeed(validNews);
+      } catch (err) {
+        console.error("Failed to fetch news", err);
+      } finally {
+        setNewsLoading(false);
+      }
     } catch (err) {
       console.error(err);
       setError(
-        err.message || "Failed to load stock data. Please check symbol.",
+        err.message ||
+          "Failed to load stock data. Please check symbol or use the suggestions dropdown.",
       );
     } finally {
       setLoading(false);
     }
   };
 
-  // Helper function to calculate Moving Averages and RSI from the raw price array
   const calculateTechnicalIndicators = (history, liveVolume) => {
     if (!history || history.length === 0) return [];
 
@@ -94,26 +178,31 @@ export default function StockAnalyzer() {
 
     for (let i = 0; i < history.length; i++) {
       const price = history[i].price;
-      let sma10 = null; // Represents 50-Day SMA (10 weeks)
-      let sma40 = null; // Represents 200-Day SMA (40 weeks)
+      let sma10 = null;
+      let sma40 = null;
+      let upperBand = null;
+      let lowerBand = null;
       let rsi = 50;
 
-      // Simulate historical volume curve anchored to current live volume
       const simVolume = baseVolume * (0.6 + Math.random() * 0.8);
 
-      // Calculate 10-period moving average
       if (i >= 9) {
         const slice = history.slice(i - 9, i + 1);
         sma10 = slice.reduce((sum, val) => sum + val.price, 0) / 10;
+
+        const variance =
+          slice.reduce((sum, val) => sum + Math.pow(val.price - sma10, 2), 0) /
+          10;
+        const stdDev = Math.sqrt(variance);
+        upperBand = sma10 + stdDev * 2;
+        lowerBand = sma10 - stdDev * 2;
       }
 
-      // Calculate 40-period moving average
       if (i >= 39) {
         const slice = history.slice(i - 39, i + 1);
         sma40 = slice.reduce((sum, val) => sum + val.price, 0) / 40;
       }
 
-      // Calculate 14-period RSI
       if (i > 0) {
         const change = price - history[i - 1].price;
         gains.push(change > 0 ? change : 0);
@@ -131,6 +220,8 @@ export default function StockAnalyzer() {
         price: price,
         sma50: sma10 ? Number(sma10.toFixed(2)) : null,
         sma200: sma40 ? Number(sma40.toFixed(2)) : null,
+        upperBand: upperBand ? Number(upperBand.toFixed(2)) : null,
+        lowerBand: lowerBand ? Number(lowerBand.toFixed(2)) : null,
         volume: Math.floor(simVolume),
         rsi: Number(rsi.toFixed(2)),
       });
@@ -138,17 +229,97 @@ export default function StockAnalyzer() {
     return processed;
   };
 
+  const analyzeSentiment = (title) => {
+    if (!title) return "Neutral";
+    const text = title.toLowerCase();
+    const bullishWords = [
+      "surge",
+      "jump",
+      "gain",
+      "high",
+      "buy",
+      "up",
+      "growth",
+      "profit",
+      "beat",
+      "soar",
+      "rally",
+      "bull",
+      "upgrade",
+      "positive",
+      "record",
+    ];
+    const bearishWords = [
+      "drop",
+      "fall",
+      "low",
+      "sell",
+      "down",
+      "loss",
+      "miss",
+      "crash",
+      "plunge",
+      "bear",
+      "slump",
+      "cut",
+      "downgrade",
+      "negative",
+      "warning",
+      "fear",
+    ];
+
+    let score = 0;
+    bullishWords.forEach((word) => {
+      if (text.includes(word)) score++;
+    });
+    bearishWords.forEach((word) => {
+      if (text.includes(word)) score--;
+    });
+
+    if (score > 0) return "Bullish";
+    if (score < 0) return "Bearish";
+    return "Neutral";
+  };
+
+  const formatTime = (timeData) => {
+    if (!timeData) return "Recently";
+    const date =
+      typeof timeData === "number" && timeData < 1000000000000
+        ? new Date(timeData * 1000)
+        : new Date(timeData);
+    const diffHours = Math.floor((new Date() - date) / (1000 * 60 * 60));
+    if (diffHours < 1) return "Just now";
+    if (diffHours < 24)
+      return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
+  };
+
   const handleSearch = (e) => {
     e.preventDefault();
     if (searchInput.trim()) {
       setSymbol(searchInput.toUpperCase().trim());
+      setShowSuggestions(false);
     }
   };
 
-  // Safe fallbacks for UI rendering
   const currentPrice = liveQuote?.regularMarketPrice || 0;
   const priceChange = liveQuote?.regularMarketChangePercent || 0;
   const isPositive = priceChange >= 0;
+
+  const high52 =
+    technicalData.length > 0
+      ? Math.max(...technicalData.map((d) => d.price))
+      : 0;
+  const low52 =
+    technicalData.length > 0
+      ? Math.min(...technicalData.map((d) => d.price))
+      : 0;
+  const positionPercent =
+    high52 - low52 === 0
+      ? 50
+      : ((currentPrice - low52) / (high52 - low52)) * 100;
+
   const currentRSI =
     technicalData.length > 0 ? technicalData[technicalData.length - 1].rsi : 50;
   const rsiStatus =
@@ -156,8 +327,6 @@ export default function StockAnalyzer() {
   const formattedVolume = liveQuote?.regularMarketVolume
     ? (liveQuote.regularMarketVolume / 1000000).toFixed(2) + "M"
     : "N/A";
-
-  // Extract P/E Ratio (Yahoo Finance usually returns trailingPE, falling back to forwardPE)
   const peRatio = liveQuote?.trailingPE || liveQuote?.forwardPE || null;
   const formattedPE = peRatio ? peRatio.toFixed(2) : "N/A";
 
@@ -192,10 +361,50 @@ export default function StockAnalyzer() {
               <input
                 type="text"
                 value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Enter Ticker (e.g. TCS.NS)"
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none w-64 font-bold text-gray-700 uppercase"
+                onChange={(e) => {
+                  setSearchInput(e.target.value);
+                  setShowSuggestions(true);
+                }}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => setShowSuggestions(false)}
+                placeholder="Search Ticker or Company..."
+                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none w-72 font-bold text-gray-700 uppercase"
               />
+
+              {/* Auto-Suggest Dropdown */}
+              <AnimatePresence>
+                {showSuggestions && suggestions.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="absolute top-full left-0 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden"
+                  >
+                    {suggestions.map((suggestion, idx) => (
+                      <div
+                        key={idx}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setSearchInput(suggestion.symbol);
+                          setSymbol(suggestion.symbol);
+                          setShowSuggestions(false);
+                        }}
+                        className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0 transition"
+                      >
+                        <div className="font-black text-gray-900 flex items-center justify-between">
+                          {suggestion.symbol}
+                          <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                            {suggestion.exchDisp}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-500 truncate mt-1">
+                          {suggestion.shortname || suggestion.longname}
+                        </div>
+                      </div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
             <button
               type="submit"
@@ -212,7 +421,30 @@ export default function StockAnalyzer() {
           </div>
         )}
 
-        {loading ? (
+        {/* 3. CHANGED: Display a Beautiful Empty State if no symbol is selected */}
+        {!symbol && !loading && !error && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-[2rem] p-16 text-center shadow-sm border border-gray-200 mt-12 max-w-3xl mx-auto"
+          >
+            <div className="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+              <Search size={40} className="text-blue-500" />
+            </div>
+            <h2 className="text-3xl font-black text-gray-800 mb-4">
+              What should we analyze today?
+            </h2>
+            <p className="text-lg text-gray-500 font-medium max-w-md mx-auto leading-relaxed">
+              Use the search bar above to look up any Indian stock ticker (like{" "}
+              <span className="text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded">
+                TCS.NS
+              </span>{" "}             
+              ) to unlock deep technical indicators and live market sentiment.
+            </p>
+          </motion.div>
+        )}
+
+        {loading && symbol ? (
           <div className="text-center py-32">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <p className="text-blue-600 font-bold text-lg animate-pulse">
@@ -221,19 +453,23 @@ export default function StockAnalyzer() {
           </div>
         ) : (
           !error &&
+          symbol &&
           liveQuote && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               className="space-y-6"
             >
-              {/* Top Stat Cards (Updated to a 5-column grid) */}
+              {/* Top Stat Cards */}
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                   <p className="text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">
                     Asset Symbol
                   </p>
-                  <h2 className="text-2xl font-black text-gray-900 truncate">
+                  <h2
+                    className="text-2xl font-black text-gray-900 truncate"
+                    title={symbol}
+                  >
                     {symbol}
                   </h2>
                   <div
@@ -265,7 +501,6 @@ export default function StockAnalyzer() {
                   </p>
                 </div>
 
-                {/* NEW P/E Ratio Card */}
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                   <p className="text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">
                     P/E Ratio
@@ -308,12 +543,12 @@ export default function StockAnalyzer() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Main Chart: Price vs Moving Averages */}
+                {/* Main Chart */}
                 <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                   <div className="flex items-center gap-2 mb-6">
                     <Activity className="text-blue-600" size={20} />
                     <h3 className="text-lg font-bold text-gray-800">
-                      52-Week Trend & Moving Averages
+                      Trend, Moving Averages & Bollinger Bands
                     </h3>
                   </div>
                   <div className="h-[350px] w-full">
@@ -351,6 +586,24 @@ export default function StockAnalyzer() {
 
                         <Line
                           type="monotone"
+                          dataKey="upperBand"
+                          name="Upper Band"
+                          stroke="#cbd5e1"
+                          strokeWidth={1}
+                          dot={false}
+                          strokeDasharray="3 3"
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="lowerBand"
+                          name="Lower Band"
+                          stroke="#cbd5e1"
+                          strokeWidth={1}
+                          dot={false}
+                          strokeDasharray="3 3"
+                        />
+                        <Line
+                          type="monotone"
                           dataKey="sma200"
                           name="Long Term MA"
                           stroke="#f59e0b"
@@ -380,9 +633,41 @@ export default function StockAnalyzer() {
                   </div>
                 </div>
 
-                {/* Right Column: Volume & Momentum */}
+                {/* Right Column */}
                 <div className="space-y-6">
-                  {/* Volume Bar Chart */}
+                  {/* 52-Week Range Thermometer */}
+                  <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <Thermometer size={20} className="text-orange-500" />{" "}
+                        52-Week Range
+                      </h3>
+                    </div>
+                    <div className="mt-4">
+                      <div className="flex justify-between text-xs font-bold text-gray-500 mb-2">
+                        <span>Low: ₹{low52.toFixed(2)}</span>
+                        <span>High: ₹{high52.toFixed(2)}</span>
+                      </div>
+                      <div className="relative w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="absolute top-0 left-0 h-full bg-gradient-to-r from-red-500 via-yellow-400 to-green-500 w-full opacity-60"></div>
+                        <div
+                          className="absolute top-0 h-full w-2 bg-gray-900 rounded-full shadow-md border border-white"
+                          style={{
+                            left: `calc(${Math.min(Math.max(positionPercent, 0), 100)}% - 4px)`,
+                          }}
+                        ></div>
+                      </div>
+                      <p className="text-center text-xs font-medium mt-3 text-gray-500">
+                        Current Price sits at{" "}
+                        <strong className="text-gray-800">
+                          {positionPercent.toFixed(1)}%
+                        </strong>{" "}
+                        of its yearly range.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Volume Chart */}
                   <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                     <div className="flex items-center gap-2 mb-4">
                       <BarChart2 className="text-emerald-500" size={20} />
@@ -390,7 +675,7 @@ export default function StockAnalyzer() {
                         Volume Profile
                       </h3>
                     </div>
-                    <div className="h-[140px] w-full">
+                    <div className="h-[100px] w-full">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={technicalData}>
                           <XAxis dataKey="date" hide />
@@ -414,7 +699,7 @@ export default function StockAnalyzer() {
                     </div>
                   </div>
 
-                  {/* RSI Gauge Chart */}
+                  {/* RSI Chart */}
                   <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-bold text-gray-800">
@@ -471,6 +756,66 @@ export default function StockAnalyzer() {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* LIVE NEWS & SENTIMENT FEED */}
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-2">
+                    <Newspaper className="text-blue-600" size={24} />
+                    <h3 className="text-xl font-bold text-gray-800">
+                      Live Market Intelligence & Sentiment
+                    </h3>
+                  </div>
+                  {isGeneralNews && (
+                    <span className="bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full border border-blue-200">
+                      Top Indian Market Updates
+                    </span>
+                  )}
+                </div>
+
+                {newsLoading ? (
+                  <div className="text-center text-sm text-gray-500 py-8 animate-pulse font-bold">
+                    Scanning global news feeds...
+                  </div>
+                ) : newsFeed.length === 0 ? (
+                  <div className="text-center text-sm text-gray-500 py-8 font-medium">
+                    No recent news available.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {newsFeed.map((news, idx) => {
+                      const sentiment = analyzeSentiment(news.title);
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => window.open(news.link, "_blank")}
+                          className="p-5 border border-gray-100 rounded-xl bg-gray-50 hover:bg-white hover:shadow-md transition duration-200 cursor-pointer flex flex-col justify-between"
+                        >
+                          <div>
+                            <div className="flex justify-between items-start mb-3">
+                              <span className="text-xs font-bold text-gray-400">
+                                {news.publisher || "Finance News"} •{" "}
+                                {formatTime(news.providerPublishTime)}
+                              </span>
+                              <span
+                                className={`text-[10px] font-black px-2 py-1 rounded uppercase tracking-wider ${sentiment === "Bullish" ? "bg-green-100 text-green-700" : sentiment === "Bearish" ? "bg-red-100 text-red-700" : "bg-gray-200 text-gray-700"}`}
+                              >
+                                {sentiment}
+                              </span>
+                            </div>
+                            <h4 className="text-sm font-bold text-gray-800 leading-relaxed mb-4">
+                              {news.title}
+                            </h4>
+                          </div>
+                          <span className="text-xs text-blue-600 font-bold hover:underline mt-auto">
+                            Read Article &rarr;
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </motion.div>
           )

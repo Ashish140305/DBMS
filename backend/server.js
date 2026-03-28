@@ -11,6 +11,9 @@ import authRoutes from "./routes/auth.js";
 import liveRoutes from "./routes/live.js";
 import paymentRoutes from "./routes/payment.js";
 import watchlistRoutes from "./routes/watchlist.js";
+import userRoutes from "./routes/user.js";
+import leaderboardRoutes from "./routes/leaderboard.js";
+import advancedRoutes from "./routes/advanced.js";
 
 const app = express();
 app.use(cors());
@@ -38,7 +41,9 @@ app.use("/api/auth", authRoutes);
 app.use("/api/live", liveRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/watchlist", watchlistRoutes);
-
+app.use("/api/user", userRoutes);
+app.use("/api/leaderboard", leaderboardRoutes);
+app.use("/api/advanced", advancedRoutes);
 
 
 // Simulate Live Mutual Fund NAV updates
