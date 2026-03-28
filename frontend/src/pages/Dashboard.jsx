@@ -102,20 +102,32 @@ const Dashboard = ({ user }) => {
     return () => clearInterval(interval);
   }, [portfolio]);
 
-  const handleSell = (investmentId, fundName) => {
+  const handleSell = async (item, liveCurrentValue) => {
     if (
       !window.confirm(
-        `Are you sure you want to sell your holding in ${fundName}?`,
+        `Are you sure you want to sell your holding in ${item.ticker_symbol}?`,
       )
     )
       return;
-    fetch(`http://localhost:5000/api/portfolio/${investmentId}`, {
-      method: "DELETE",
-    })
-      .then(() =>
-        setPortfolio((prev) => prev.filter((item) => item.id !== investmentId)),
-      )
-      .catch((err) => alert("Failed to sell investment"));
+
+    try {
+      const res = await fetch("http://localhost:5000/api/portfolio/sell", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: user.id,
+          portfolio_id: item.id,
+          amount: liveCurrentValue, // Give them the LIVE money back!
+        }),
+      });
+
+      if (res.ok) {
+        alert("Stock Sold Successfully! Wallet Updated.");
+        fetchPortfolio(); // Refresh table
+      }
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   // --- DYNAMIC LIVE CALCULATIONS ---
@@ -824,17 +836,18 @@ const Dashboard = ({ user }) => {
                         </td>
                         <td style={{ textAlign: "center" }}>
                           <button
-                            onClick={() => handleSell(item.id, item.fund_name)}
-                            style={{
-                              padding: "0.5rem",
-                              color: "#94a3b8",
-                              background: "transparent",
-                              border: "none",
-                              cursor: "pointer",
-                              transition: "color 0.2s",
-                            }}
+                            onClick={() => handleSell(item, currentValue)}
+                            className="bg-rose-50 text-rose-600 font-bold px-4 py-2 rounded-lg hover:bg-rose-600 hover:text-white transition-colors text-sm shadow-sm"
+                            // style={{
+                            //   padding: "0.5rem",
+                            //   color: "#94a3b8",
+                            //   background: "transparent",
+                            //   border: "none",
+                            //   cursor: "pointer",
+                            //   transition: "color 0.2s",
+                            // }}
                           >
-                            <Trash2 size={18} />
+                            Sell Asset
                           </button>
                         </td>
                       </tr>
