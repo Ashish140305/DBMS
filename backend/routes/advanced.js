@@ -88,6 +88,12 @@ router.get("/admin/stats", (req, res) => {
 
 // 5. MASS UPDATE: "The Stimulus Check"
 router.post("/admin/airdrop", (req, res) => {
+  // Check for the admin authorization token
+  const authHeader = req.headers.authorization;
+  if (!authHeader || authHeader !== "Bearer dba-secret-access-granted") {
+    return res.status(403).json({ error: "Unauthorized: Admin access required." });
+  }
+
   const bonusAmount = 10000;
   // This mass-updates EVERY user in the database simultaneously
   db.query(
