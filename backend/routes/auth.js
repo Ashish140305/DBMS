@@ -53,7 +53,7 @@ router.post("/login", (req, res) => {
     if (!isMatch) return res.status(400).json({ error: "Wrong credentials!" });
 
     // ✨ THE FIX: Include full_name and profile_picture in the payload sent to React!
-    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: "1h" });
     
     res.json({
       token,
