@@ -7,7 +7,8 @@ Developed specifically as a comprehensive Database Management System (DBMS) proj
 
 ## ✨ Key Features
 
-  - **🔴 Live Market Synchronization:** Fetches and mathematically blends real-time stock prices (Reliance, TCS, HDFC, etc.) via Yahoo Finance APIs to calculate exact live portfolio values and "Today's P\&L" continuously.
+  - **🔴 Live Market Synchronization:** Fetches and mathematically blends real-time stock prices (Reliance, TCS, HDFC, etc.) via Yahoo Finance APIs to calculate exact live portfolio values and "Today's P&L" continuously.
+  - **🧮 SIP & Compound Interest Calculator:** An interactive wealth-planning tool that visualizes the power of compounding. Users can dynamically adjust monthly investments, expected return rates, and time periods to see instant projections via responsive Area (Growth Over Time) and Donut (Wealth Composition) charts.
   - **🔬 Deep Technical Analyzer:** A dedicated analysis engine that dynamically calculates and charts 50-Period & 200-Period Simple Moving Averages (SMA), 14-Period Relative Strength Index (RSI), P/E Ratios, and Trading Volume profiles on the fly. Includes an AI-driven "Technical Verdict" summary for quick market sentiment reading.
   - **📖 Global Market Dictionary:** A hybrid-architecture educational module. It features a lightning-fast local cache for common terms and integrates the **Wikipedia Search API** to fetch and format live financial definitions from the web in real-time.
   - **⭐ Dynamic Watchlist:** Persistently track your favorite assets before buying. Add and remove global tickers with instant live-price binding.
@@ -21,7 +22,7 @@ Developed specifically as a comprehensive Database Management System (DBMS) proj
   - **🖼️ Native Base64 Profiles:** Users can customize their financial goals and upload profile avatars, which are instantly converted into Base64 text strings and stored directly inside the MySQL database.
   - **📄 PDF Statement Generation:** Users can export their autonomous database transaction history into a beautifully formatted, downloadable PDF receipt using `jsPDF`.
 
------
+---
 
 ## 🛠️ Tech Stack
 
@@ -30,7 +31,7 @@ Developed specifically as a comprehensive Database Management System (DBMS) proj
   - **Database:** MySQL (Relational tables, Foreign Keys, Unique Constraints, Triggers, Complex Aggregations).
   - **APIs & Libraries:** `yahoo-finance2` (Live Data), Wikipedia API (Web Dictionary), `stripe` (Payments), `recharts` (Data Visualization), `jspdf` & `jspdf-autotable` (PDF Export).
 
------
+---
 
 ## 🗄️ Database Architecture
 
@@ -42,30 +43,27 @@ As a DBMS-focused project, InvestIQ utilizes a strictly normalized relational da
 4.  **`watchlist`**: A junction table with `UNIQUE` constraints preventing duplicate asset tracking per user.
 5.  **`audit_logs`**: An immutable ledger populated exclusively via SQL `AFTER INSERT` and `AFTER DELETE` triggers on the portfolio table.
 
------
+---
 
 ## ⚙️ Local Installation & Setup
 
-### 1\. Prerequisites
+### 1. Prerequisites
 
 Make sure you have [Node.js](https://nodejs.org/) and [XAMPP](https://www.apachefriends.org/) (for MySQL) installed on your machine.
 
-### 2\. Clone the Repository
+### 2. Clone the Repository
 
 ```bash
-git clone https://github.com/Bructi/DBMS.git
+git clone [https://github.com/Bructi/DBMS.git](https://github.com/Bructi/DBMS.git)
 cd DBMS
-```
+````
 
 ### 3\. Database Configuration
 
 1.  Open XAMPP and start the MySQL and Apache modules.
-
 2.  Open your browser and go to http://localhost/phpmyadmin.
-
-3.  Create a new database named investiq\_db.
-
-4.  Click the Import tab and upload the provided SQL dump file located in the database/ folder to instantly generate all tables, constraints, seeded data, and triggers.
+3.  Create a new database named `investiq_db`.
+4.  Click the Import tab and upload the provided SQL dump file located in the `database/` folder to instantly generate all tables, constraints, seeded data, and triggers.
 
 ### 4\. Backend Setup
 
